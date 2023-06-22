@@ -1,0 +1,158 @@
+/*
+	Data Cleaning 
+*/
+
+select * from AnalystPortfolioProject..HousingData
+
+--Standardize Date format
+select SaleDate, CONVERT(date,SaleDate) 
+from AnalystPortfolioProject..HousingData
+
+/*update HousingData
+set SaleDate = CONVERT(date,SaleDate) 
+*/
+
+alter table HousingData
+add SaleDateConverted date;
+
+update HousingData
+set SaleDateConverted = CONVERT(date,SaleDate) 
+
+select SaleDateConverted from AnalystPortfolioProject..HousingData
+
+---------------------------------------------------------------------------------------------------------------
+
+--Populate Property Address Data 
+
+select * 
+from AnalystPortfolioProject..HousingData
+--where PropertyAddress is null
+order by ParcelID
+
+select a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress, ISNULL(a.PropertyAddress, b.PropertyAddress) 
+from AnalystPortfolioProject..HousingData a
+join AnalystPortfolioProject..HousingData b
+	on a.ParcelID = b.ParcelID
+	and a.[UniqueID ] <> b.[UniqueID ]
+where a.PropertyAddress is null
+
+--updating address data
+update a
+set PropertyAddress = ISNULL(a.PropertyAddress, b.PropertyAddress) 
+from AnalystPortfolioProject..HousingData a
+join AnalystPortfolioProject..HousingData b
+	on a.ParcelID = b.ParcelID
+	and a.[UniqueID ] <> b.[UniqueID ]
+where a.PropertyAddress is null
+
+---------------------------------------------------------------------------------------------------------------
+
+--Breaking Address into Individual columns (Address, City, State)
+
+select PropertyAddress
+from AnalystPortfolioProject..HousingData
+
+--Now separating individual columns from PropertyAddress
+select 
+SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1) as Address
+, SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) +1, Len(PropertyAddress)) as City
+from AnalystPortfolioProject..HousingData
+
+alter table AnalystPortfolioProject..HousingData
+add PropertySplitAddress nvarchar(255);
+
+update AnalystPortfolioProject..HousingData
+set PropertySplitAddress = SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1)
+
+alter table AnalystPortfolioProject..HousingData
+add PropertySplitCity nvarchar(255);
+
+update AnalystPortfolioProject..HousingData
+set PropertySplitAddress = SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) +1, Len(PropertyAddress)) 
+
+select * 
+from AnalystPortfolioProject..HousingData
+
+--Another way to extract individual columns from address 
+-- Extracting individual columns of owner address
+select OwnerAddress 
+from AnalystPortfolioProject..HousingData
+
+select 
+PARSENAME(REPLACE(OwnerAddress, ',','.'), 3) as Address
+,PARSENAME(REPLACE(OwnerAddress, ',','.'), 2)as City
+,PARSENAME(REPLACE(OwnerAddress, ',','.'), 1) as State
+from AnalystPortfolioProject..HousingData
+
+alter table AnalystPortfolioProject..HousingData
+add OwnerSplitAddress nvarchar(255);
+
+update AnalystPortfolioProject..HousingData
+set OwnerSplitAddress = PARSENAME(REPLACE(OwnerAddress, ',','.'), 3)
+
+alter table AnalystPortfolioProject..HousingData
+add OwnerSplitCity nvarchar(255);
+
+update AnalystPortfolioProject..HousingData
+set OwnerSplitCity= PARSENAME(REPLACE(OwnerAddress, ',','.'), 2)
+
+alter table AnalystPortfolioProject..HousingData
+add OwnerSplitState nvarchar(255);
+
+update AnalystPortfolioProject..HousingData
+set OwnerSplitState= PARSENAME(REPLACE(OwnerAddress, ',','.'), 1)
+
+--------------------------------------------------------------------------------------------------------------------
+
+--Changing Y and N to Yes & No in "Sold as vacant" column field
+
+select SoldAsVacant, count(SoldAsVacant)
+from AnalystPortfolioProject.dbo.HousingData
+group by SoldAsVacant
+order by 2
+
+select SoldAsVacant
+, case  when SoldAsVacant = 'Y' then 'Yes'
+		when SoldAsVacant = 'N' then 'No'
+		else SoldAsVacant
+		end
+from AnalystPortfolioProject.dbo.HousingData
+
+
+update AnalystPortfolioProject.dbo.HousingData
+set SoldAsVacant = case  when SoldAsVacant = 'Y' then 'Yes'
+		when SoldAsVacant = 'N' then 'No'
+		else SoldAsVacant
+		end
+--------------------------------------------------------------------------------------------------------------------
+
+-- Removing Duplicates using CTE(Common Table Expression)
+with RowNumCTE as (
+select *,
+	Row_number() over (
+	Partition by ParcelId,
+				 PropertyAddress,
+				 SalePrice,
+				 SaleDate,
+				 LegalReference
+				 order by 
+					UniqueId
+					) row_num
+
+from AnalystPortfolioProject.dbo.HousingData
+)
+select * 
+--delete     -- this will delete the duplicates which are appearing more than 1 in a dataset with below conditions
+from RowNumCTE
+where row_num > 1
+order by PropertyAddress
+
+--------------------------------------------------------------------------------------------------------------------
+
+--Deleting Unused columns 
+
+select *
+from AnalystPortfolioProject.dbo.HousingData
+
+alter table AnalystPortfolioProject.dbo.HousingData
+drop column OwnerAddress, TaxDistrict, PropertyAddress, SaleDate
